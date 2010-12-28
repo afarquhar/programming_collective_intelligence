@@ -1,21 +1,10 @@
-colnames = []
-rownames = []
-data = []
 
-
-lines = IO.readlines("blogdata.txt")
-colnames = lines.first.split("\t").map { |x| x.strip}
-lines[1..-1].each do |l|
-  toks = l.split("\t")
-  rownames << toks.first
-  data << toks[1..-1].map {|t| t.strip.to_i }
-end
 
 
 
   class BiCluster
-    attr_reader :vec, :id
-    def initialize(vec, left = nil, right = nil, distance = 0.0, id=nil)
+    attr_reader :vec, :id, :left, :right
+    def initialize(vec, id, left = nil, right = nil, distance = 0.0)
       @vec, @left, @right, @distance, @id = vec, left, right, distance, id
     end  
   
@@ -45,28 +34,75 @@ end
 
 
 def hcluster(rows)
-  clusters = []
+
   distances = {}
-  rows.each_index do |i| { clusters << BiCluster.new(rows[i], i)}
+  current_cluster_id = -1
+  
+  clusters = []
+  rows.each_index {|i| clusters << BiCluster.new(rows[i], i)}
     
   while(clusters.size > 1)
-    closest_pair_indexes = [0,1]
+    closest_pair = [clusters[0], clusters[1]]
     closest_distance = pearson(clusters[0].vec, clusters[1].vec)
     
-    for(i in 0...clusters.size)
-      for(j in (i+1)...clusters.size)
-        key = [clusters[i].key, clusters[j].key]
-        if(!distances[key]) distances[key] = pearson(clusters[i].vec, clusters[j].vec)
+    (0...clusters.size).each do |i|
+      ((i+1)...clusters.size).each do |j|
+        key = [clusters[i].id, clusters[j].id]
+        if(!distances[key]) 
+          distances[key] = pearson(clusters[i].vec, clusters[j].vec)
+        end
         
         dist = distances[key]
-        if(dist < closest)
+        if(dist < closest_distance)
           closest_distance = dist
-          closest_pair_indexes = [i, j]
+          closest_pair = [clusters[i], clusters[j]]
+        end
       end
     end
     
+    mergevec = []
     
+    closest_pair.first.vec.each_with_index do |vec1val, i|
+      mergevec << (vec1val + closest_pair.last.vec[i])/2.0
+    end
+    
+    newcluster = BiCluster.new(mergevec, current_cluster_id, closest_pair.first, closest_pair.last, closest_distance)
+    current_cluster_id -= 1
+    clusters.delete closest_pair.last
+    clusters.delete closest_pair.first
+    clusters << newcluster
   end
-
+  
+  clusters[0]
 end
+
+def print_cluster(clust, labels, n=0)
+  msg = ""
+  msg << " " * n
+  if(clust.id < 0)
+    msg << "-"
+  else
+    msg << labels[clust.id]
+  end
+  puts msg
+   print_cluster(clust.left, labels, n +1) if(clust.left)
+   print_cluster(clust.right, labels, n +1) if(clust.right)
+end
+
+
+colnames = []
+rownames = []
+data = []
+
+
+lines = IO.readlines("blogdata.txt")
+colnames = lines.first.split("\t").map { |x| x.strip}
+lines[1..-1].each do |l|
+  toks = l.split("\t")
+  rownames << toks.first
+  data << toks[1..-1].map {|t| t.strip.to_i }
+end
+
+clust = hcluster(data)
+print_cluster(clust, rownames)
   
