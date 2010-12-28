@@ -1,6 +1,6 @@
 class Similarity
   
-  attr_reader :critics
+  attr_reader :critics, :films
   
   def initialize
     @critics = {
@@ -100,6 +100,8 @@ class Similarity
     num/den
     
   end
+
+
   
   def top_people_matches(person, n=3, func = :sim_pearson)
     mapped = @critics.keys.map do |other|
@@ -115,20 +117,20 @@ class Similarity
     end.compact.sort_by do |ar|
       ar.first
     end.reverse.slice(0, n)    
-    
   end
 
   
-  def recommendations(prefs, person, func = :sim_pearson)
+  def recommendations(prefs, item, func = :sim_pearson)
     
       totals = Hash.new {|h, k| h[k] = 0 }
       simsums = Hash.new {|h, k| h[k] = 0 }
-      
-      prefs.each do |critic, score_hash|
-        next if critic == person
-        sim = send(func, prefs, person, critic)
+
+      prefs.each do |other, score_hash|
+        next if other == item
+        sim = send(func, prefs, item, other)
         score_hash.each do |film, score|
-          next unless score == 0 or !@critics[person][film]
+          next unless score == 0 or !prefs[item][film]
+
           totals[film] += sim * score
           simsums[film] += sim
         end
@@ -138,6 +140,7 @@ class Similarity
       totals.each do |film, total|
         rankings<< [total/simsums[film], film]
       end
+      
       rankings.sort_by do |ar|
         ar.first
       end.reverse
@@ -153,7 +156,7 @@ class Similarity
   private
   
   def transform_map(m)
-    t = Hash.new {|h, k| h[k] = Hash.new {|h1, k1| h1[k1] = 0 } }
+    t = Hash.new {|h, k| h[k] = Hash.new {} }
     m.each do |critic, score_map|
       score_map.each do |film, score|
         t[film][critic] = score
@@ -179,8 +182,9 @@ sim = Similarity.new
 # Similarity.new.show_all(:sim_distance)
 # Similarity.new.show_all(:sim_pearson)
  # puts sim.top_people_matches('alex', 3).inspect
- puts sim.top_film_matches('superman returns', 3).inspect
- # puts sim.recommendations(sim.critics, 'alex').inspect
+ # puts sim.top_film_matches('superman returns', 3).inspect
+  puts sim.recommendations(sim.critics, 'alex').inspect
+  # puts sim.recommendations(sim.films, 'just my luck').inspect
 
 
 
