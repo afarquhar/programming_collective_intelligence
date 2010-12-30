@@ -1,8 +1,4 @@
-
-
-
-
-  class BiCluster
+class BiCluster
     attr_reader :vec, :id, :left, :right
     def initialize(vec, id, left = nil, right = nil, distance = 0.0)
       @vec, @left, @right, @distance, @id = vec, left, right, distance, id
@@ -76,6 +72,29 @@ def hcluster(rows)
   clusters[0]
 end
 
+def kcluster(rows, k=4)
+  ranges = []
+  
+  rows.first.each_index do |col|
+    colvals = rows.map do |row|
+      row[col]
+    end
+    ranges << [colvals.min, colvals.max]
+  end
+  
+  # puts ranges.inspect
+  
+  clusters = []
+  (0...k).each do |k|
+    clusters << (0...rows.first.size).map do |i|
+      (rand() * (ranges[i][1] - ranges[i][0])) + ranges[i][0]
+    end
+  end
+  
+  lastmatches = nil
+    
+end
+
 def print_cluster(clust, labels, n=0)
   msg = ""
   msg << " " * n
@@ -103,6 +122,7 @@ lines[1..-1].each do |l|
   data << toks[1..-1].map {|t| t.strip.to_i }
 end
 
-clust = hcluster(data)
-print_cluster(clust, rownames)
+# clust = hcluster(data)
+# print_cluster(clust, rownames)
+kcluster(data)
   
