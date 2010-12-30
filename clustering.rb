@@ -73,26 +73,72 @@ def hcluster(rows)
 end
 
 def kcluster(rows, k=4)
+
+  cluster_range = (0...k)
+  max_col = rows.first.size
+  col_range = (0...max_col)
+
   ranges = []
   
-  rows.first.each_index do |col|
+  #find min max for each col
+  col_range.each do |col|
     colvals = rows.map do |row|
       row[col]
     end
     ranges << [colvals.min, colvals.max]
   end
-  
-  # puts ranges.inspect
-  
-  clusters = []
-  (0...k).each do |k|
-    clusters << (0...rows.first.size).map do |i|
+
+  #create k centroids
+  centroids = []
+  cluster_range.each do
+    centroids << col_range.map do |i|
       (rand() * (ranges[i][1] - ranges[i][0])) + ranges[i][0]
     end
   end
   
   lastmatches = nil
+  matching_rows = nil
+
+  (0..100).each do |x|
+    puts "iteration #{x}"
     
+    matching_rows = Array.new(k) { Array.new }
+    
+    #for each centroid, find the nearest rows
+    rows.each_index do |j|
+      row = rows[j]
+      bestmatch = 0
+      cluster_range.each do |i|
+        dist = pearson(centroids[i], row)
+        bestmatch = i if(dist < pearson(centroids[bestmatch], row))
+      end
+      
+      matching_rows[bestmatch] << j
+    end
+    
+    break if(matching_rows == lastmatches)
+    lastmatches = matching_rows
+    
+    cluster_range.each do |i|
+      avgs = [0.0] * max_col
+      if(matching_rows[i].size > 0)
+        matching_rows[i].each do |row|
+          col_range.each do |col|
+            avgs[col] += rows[row][col]
+          end
+          avgs.each_index do |j|
+            avgs[j] /= matching_rows[i].size
+          end
+          centroids[i] = avgs
+        end
+      end
+    end
+    
+  end
+  
+  
+  return matching_rows
+  
 end
 
 def print_cluster(clust, labels, n=0)
@@ -104,8 +150,9 @@ def print_cluster(clust, labels, n=0)
     msg << labels[clust.id]
   end
   puts msg
-   print_cluster(clust.left, labels, n +1) if(clust.left)
-   print_cluster(clust.right, labels, n +1) if(clust.right)
+  print_cluster(clust.left, labels, n +1) if(clust.left)
+  print_cluster(clust.right, labels, n +1) if(clust.right)
+  
 end
 
 
@@ -118,11 +165,17 @@ lines = IO.readlines("blogdata.txt")
 colnames = lines.first.split("\t").map { |x| x.strip}
 lines[1..-1].each do |l|
   toks = l.split("\t")
-  rownames << toks.first
+  rownames << toks.first.strip
   data << toks[1..-1].map {|t| t.strip.to_i }
 end
 
 # clust = hcluster(data)
 # print_cluster(clust, rownames)
-kcluster(data)
+kclust = kcluster(data, 10)
+kclust.each_with_index do|clust, i|
+  puts "cluster #{i}"
+  clust.each do |row_id|
+    puts "\t#{rownames[row_id]}"
+  end
+end
   
