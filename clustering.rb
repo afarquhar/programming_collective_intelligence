@@ -133,7 +133,6 @@ def kcluster(rows, k=4)
         end
       end
     end
-    
   end
   
   
