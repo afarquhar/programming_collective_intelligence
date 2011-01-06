@@ -33,7 +33,7 @@ class Optimize
       origin = @people[i].last
       out, ret  = flights_for(i, origin, @destination, schedule)
       
-      puts "#{name} #{origin} #{out[0]}-#{out[1]} $#{out[2]} #{ret[0]}-#{ret[1]} $#{ret[2]}"
+      puts "#{name}\t#{origin}\t#{out[0]}-#{out[1]}\t$#{out[2]}\t#{ret[0]}-#{ret[1]}\t$#{ret[2]}"
       
     end
   end
@@ -85,9 +85,40 @@ class Optimize
         best_solution = solution
       end
     end
-    
+    log_solution(best_solution)
     best_solution
 
+  end
+  
+  def annealingoptimize(domain, temp = 10000.0, cool = 0.95, step = 1)
+    vec = random_from(domain)
+    
+    while temp > 0.1
+      i = rand(domain.size)
+      dir = rand.round == 0 ? -1 : 1
+      vecb = vec.clone
+      vecb[i] = vecb[i] += dir
+      
+      if(vecb[i]) < domain[i][0]
+        vecb[i] = domain[i][0]
+      end
+      if(vecb[i]) > domain[i][1]
+        vecb[i] = domain[i][1]
+      end
+      
+      cost_a = solution_cost(vec)
+      cost_b = solution_cost(vecb)
+      if(cost_b < cost_a)
+        vec = vecb
+      else
+        p = Math.exp(-(cost_b - cost_a)/temp)
+        vec = vecb if rand < p
+      end
+      
+      temp = temp * cool
+    end
+    log_solution(vec)
+    vec
   end
   
   def hillclimb(domain)
@@ -119,7 +150,7 @@ class Optimize
       end
       break if best == current
     end
-    puts "found hillclimb solution: #{sol.inspect}"
+    log_solution(sol)
     return sol
     
   end
@@ -130,6 +161,14 @@ class Optimize
   end
   
   private 
+  
+  def log_solution(sol)
+    puts "solution: #{sol.inspect}"
+    puts "cost: #{solution_cost(sol)}"
+    print_schedule(sol)
+    
+  end
+  
   def range_of(schedule)
     (0...(schedule.size / 2 ))
   end
@@ -148,21 +187,15 @@ class Optimize
   
 end
 
-# latest 1148
-# earliest 589
-# price 2616
-# wait 2019
-# 4635
-
 
 o = Optimize.new
 o.init
-# puts o.mins("5:00")
 s = [1,4,3,2,7,3,6,3,2,4,5,3]
-# o.print_schedule s
-# puts o.solution_cost(s)
+
 domain = [[0,9]] * 12
-# puts o.solution_cost(o.randomoptimize(domain))
-o.hillclimb(domain)
+ # sol =  o.randomoptimize(domain)
+# sol =  o.hillclimb(domain)
+ sol = o.annealingoptimize(domain)
+
 
 
