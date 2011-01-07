@@ -15,7 +15,7 @@ class Optimize
   end  
   
   def init
-    IO.readlines('optimization_schedule.txt').each do |line|
+    IO.readlines(File.join(File.dirname(__FILE__), *%w[optimization_schedule.txt])).each do |line|
       origin, dest, depart, arrive, price = line.strip.split(',')
       @flights[[origin, dest]] << [depart, arrive, price.to_i]
     end
@@ -25,7 +25,6 @@ class Optimize
   def log(msg)
     puts msg if @logging
   end
-  
   
   def print_schedule(schedule)
     range_of(schedule).each do |i|
@@ -37,7 +36,6 @@ class Optimize
       
     end
   end
-  
   
   def solution_cost(schedule)
     totalprice = 0
@@ -69,10 +67,11 @@ class Optimize
     if(earliestdep > latestarrival)
       totalprice += 50
     end
+    
     totalprice + totalwait
   end
   
-  def randomoptimize(domain)
+  def random_optimize(domain)
     best_cost = 99999999
     best_solution = nil
     
@@ -87,10 +86,9 @@ class Optimize
     end
     log_solution(best_solution)
     best_solution
-
   end
   
-  def annealingoptimize(domain, temp = 10000.0, cool = 0.95, step = 1)
+  def annealing_optimize(domain, temp = 10000.0, cool = 0.95, step = 1)
     vec = random_from(domain)
     
     while temp > 0.1
@@ -121,21 +119,82 @@ class Optimize
     vec
   end
   
+  def genetic_mutate(domain, vec, step)
+    i = rand(domain.size)
+    dup = vec.clone
+    
+    if(rand < 0.5 && vec[i] > domain[i][0])
+      dup[i] -= step
+    elsif vec[i] < domain[i][1]
+      dup[i] += step
+    end
+    
+    dup
+  end
+  
+  def genetic_crossover(domain, v1, v2)
+    i = rand(domain.size)
+    v1[0...i] + v2[i..-1]
+  end
+  
+  def genetic_optimize(domain, popsize = 50, step = 1, mutprob = 0.2, elite = 0.2, maxiter = 100)
+    pop = []
+    (0..popsize).each do |i|
+      pop << random_from(domain)
+    end
+    
+    topelite = (elite * popsize).to_i
+    scores = []
+    
+    (0..maxiter).each do |i|
+      
+      scores = pop.map do |vec|
+        [solution_cost(vec), vec]
+      end.sort
+      
+      ranked = scores.map {|ar| ar.last}
+      pop = ranked[0...topelite]
+      
+      while(pop.size < popsize)
+        if(rand < mutprob)
+          c = rand(topelite)
+          pop << genetic_mutate(domain, ranked[c], step)
+        else
+          c1 = rand(topelite)
+          c2 = rand(topelite)
+          pop << genetic_crossover(domain, ranked[c1], ranked[c2])
+        end
+      end
+      puts scores[0][0]
+    end
+    
+    winner = scores[0][1]
+    log_solution(winner)
+    
+    winner
+  end
+  
   def hillclimb(domain)
     
     sol = random_from(domain)
     
     while(true)
       
-      # puts "solution: #{sol.inspect}"
       neighbours = [] 
       domain.each_index do |j|
+        
         if(sol[j]) > domain[j][0]
-          neighbours << sol[0...j] + [sol[j] - 1] + sol[j + 1..-1]
+          mutated = sol.clone
+          mutated[j] -= 1
+          neighbours << mutated
         end
+        
         if(sol[j]) < domain[j][1]
-          neighbours << sol[0...j] + [sol[j] + 1] + sol[j + 1..-1]
+          mutated = sol.clone
+          mutated[j] += 1
+          neighbours << mutated
         end
+        
       end
       
       current = solution_cost(sol)
@@ -166,7 +225,6 @@ class Optimize
     puts "solution: #{sol.inspect}"
     puts "cost: #{solution_cost(sol)}"
     print_schedule(sol)
-    
   end
   
   def range_of(schedule)
@@ -188,14 +246,7 @@ class Optimize
 end
 
 
-o = Optimize.new
-o.init
-s = [1,4,3,2,7,3,6,3,2,4,5,3]
 
-domain = [[0,9]] * 12
- # sol =  o.randomoptimize(domain)
-# sol =  o.hillclimb(domain)
- sol = o.annealingoptimize(domain)
 
 
 
