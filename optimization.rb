@@ -169,7 +169,7 @@ class Optimize
     end
     
     winner = scores[0][1]
-    log_solution(winner)
+    # log_solution(winner)
     
     winner
   end

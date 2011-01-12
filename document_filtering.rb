@@ -60,11 +60,8 @@ class Filtering
         max = probs[cat] 
         best = cat
       end
-      
     end
     
-  
-  
     probs.each do |cat, prob|
       next if cat == best
       return default if ((probs[cat] * get_threshold(best)) > probs[best])
