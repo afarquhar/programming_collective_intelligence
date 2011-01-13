@@ -19,15 +19,15 @@ end
 class Network
 
   def initialize
-    FileUtils.rm('network.pstore')
-    @word_ids = []
+    FileUtils.rm('network.pstore') if File.exists? 'network.pstore'
+    @input_ids = []
     @hidden_ids = []
-    @url_ids = []
+    @output_ids = []
     
     #node outputs
-    @activation_inputs = [1.0] * @word_ids.size
-    @activation_hidden = [1.0] * @hidden_ids.size
-    @activation_outputs = [1.0] * @url_ids.size    
+    @input_activations = [1.0] * @input_ids.size
+    @hidden_activations = [1.0] * @hidden_ids.size
+    @output_activations = [1.0] * @output_ids.size    
     
     
     @network = PStore.new('network.pstore')
@@ -40,137 +40,144 @@ class Network
     end
   end
 
-  def generate_hidden_node(word_ids, url_ids)
-    create_key = word_ids.sort.join("_")
+  def generate_hidden_node(input_ids, output_ids)
+    create_key = input_ids.sort.join("_")
     
     @network.transaction do |store|
-
-      # unless store[:hidden].include? create_key
+      
+      unless store[:hidden].include? create_key
         store[:hidden] << create_key 
-        word_ids.each do |word_id|
-          store[:input_hidden][word_id] ||= []
-          store[:input_hidden][word_id] << Link.new(word_id, create_key, 1.0/word_ids.size)
+        input_ids.each do |input_id|
+          store[:input_hidden][input_id] ||= []
+          store[:input_hidden][input_id] << Link.new(input_id, create_key, 1.0/input_ids.size)
         end
-        url_ids.each do |url_id|
+        output_ids.each do |output_id|
           store[:hidden_output][create_key] ||= []
-          store[:hidden_output][create_key] << Link.new(create_key, url_id, 0.1)
+          store[:hidden_output][create_key] << Link.new(create_key, output_id, 0.1)
         end
-      # end
+      end
     end
     
   end
   
-  def get_input_hidden_strength(word_id, hidden_id)
+  def get_input_hidden_strength(input_id, hidden_id)
     @network.transaction do |store|
-      store[:input_hidden][word_id].find {|l| l.to == hidden_id }.strength
+      found = store[:input_hidden][input_id].find {|l| l.to == hidden_id }
+      found.strength rescue -0.2
     end
   end
   
   def get_hidden_output_strength(hidden_id, output_id)
     @network.transaction do |store|
-      store[:hidden_output][hidden_id].find {|l| l.to == output_id }.strength
+      found = store[:hidden_output][hidden_id].find {|l| l.to == output_id }
+      found.strength rescue 0.0
     end    
   end
   
-  def set_input_hidden_strength(word_id, hidden_id, strength)
+  def set_input_hidden_strength(input_id, hidden_id, strength)
     @network.transaction do |store|
-      store[:input_hidden][word_id].find {|l| l.to == hidden_id }.strength = strength
+      found = store[:input_hidden][input_id].find {|l| l.to == hidden_id }
+      if found
+        found.strength = strength 
+      else
+        store[:input_hidden][input_id] << Link.new(input_id, hidden_id, strength)
+      end
     end
     
   end
   
   def set_hidden_output_strength(hidden_id, output_id, strength)
     @network.transaction do |store|
-      store[:hidden_output][hidden_id].find {|l| l.to == output_id }.strength = strength
+      found = store[:hidden_output][hidden_id].find {|l| l.to == output_id }
+      if(found)
+        found.strength = strength
+      else
+        store[:hidden_output][hidden_id] << Link.new(hidden_id, output_id, strength)
+      end
     end    
   end
 
   
-  def get_all_hidden_ids(word_ids, url_ids)
+  def get_all_hidden_ids(input_ids, output_ids)
     hidden = []
 
     @network.transaction do |store|
-      hidden = word_ids.map do |w|
-        store[:input_hidden][w].map {|l| l.to }
+      hidden = input_ids.map do |i|
+        store[:input_hidden][i].map do |l| 
+          l.to if input_ids.include? l.from 
+        end 
       end
-      
+
       store[:hidden_output].each do |h, links|
         links.each do |link|
-          hidden << link.from if url_ids.include? link.to
+          hidden << link.from if output_ids.include? link.to
         end
       end
-      
     end
-    # puts hidden.flatten.uniq
+
     hidden.flatten.uniq
   end
   
-  def setup_network(word_ids, url_ids)
-    @word_ids = word_ids
-    @hidden_ids = get_all_hidden_ids(word_ids, url_ids)
-    @url_ids = url_ids
+  def setup_network(input_ids, output_ids)
+    # puts "setting up network for #{input_ids.inspect}, #{output_ids.inspect}"
+    @input_ids = input_ids
+    @hidden_ids = get_all_hidden_ids(input_ids, output_ids)
+    @output_ids = output_ids
+    # puts "found hidden ids: #{@hidden_ids.inspect}"
     
-    #node outputs
-    # @activation_inputs = [1.0] * @word_ids.size
-    # @activation_hidden = [1.0] * @hidden_ids.size
-    # @activation_outputs = [1.0] * @url_ids.size
-    
-    @weights_input = @word_ids.map do |w|
-      @hidden_ids.map {|h|  get_input_hidden_strength(w, h) }
+
+    @weights_input = @input_ids.map do |i|
+      @hidden_ids.map {|h|  get_input_hidden_strength(i, h) }
     end
 
     @weights_output = @hidden_ids.map do |h|
-      @url_ids.map {|u|  get_hidden_output_strength(h, u) }
+      @output_ids.map {|o|  get_hidden_output_strength(h, o) }
     end
-    
-    # puts @weights_input.inspect
-    # puts @weights_output.inspect
+
   end
   
   def feed_forward
-    @word_ids.each_index do |w|
-      #is this necessary? setting it above
-      @activation_inputs[w] = 1.0
+    @input_ids.each_index do |w|
+      @input_activations[w] = 1.0
     end
     
     
     @hidden_ids.each_index do |h|
       sum  = 0.0
-      @word_ids.each_index do |w|
-        sum += @activation_inputs[w] * @weights_input[w][h]
+      @input_ids.each_index do |i|
+        sum += @input_activations[i] * @weights_input[i][h]
       end
-      @activation_hidden[h] = Math.tanh(sum)
+      @hidden_activations[h] = Math.tanh(sum)
     end
     
-    @url_ids.each_index do |u|
+    @output_ids.each_index do |o|
       sum  = 0.0
       @hidden_ids.each_index do |h|
-        sum += @activation_hidden[h] * @weights_output[h][u]
+        sum += @hidden_activations[h] * @weights_output[h][o]
       end
-      @activation_outputs[u] = Math.tanh(sum)
+      @output_activations[o] = Math.tanh(sum)
     end
-    
-    @activation_outputs
+    @output_activations
     
   end
   
 
   
   def update
-    @word_ids.each_index do |i|
+    @input_ids.each_index do |i|
       @hidden_ids.each_index do |j|
-        set_input_hidden_strength(@word_ids[i], @hidden_ids[j], @weights_input[i][j])
+        set_input_hidden_strength(@input_ids[i], @hidden_ids[j], @weights_input[i][j])
       end
     end
     @hidden_ids.each_index do |j|
-      @url_ids.each_index do |k|
-        set_hidden_output_strength(@hidden_ids[j], @url_ids[k], @weights_output[j][k])
+      @output_ids.each_index do |k|
+        set_hidden_output_strength(@hidden_ids[j], @output_ids[k], @weights_output[j][k])
       end
     end
   end
   
-  def get_result(word_ids, url_ids)
-    setup_network(word_ids, url_ids)
+  def get_result(input_ids, output_ids)
+    setup_network(input_ids, output_ids)
     feed_forward
   end
   
@@ -181,45 +188,45 @@ class Network
   def back_propagate(targets, n = 0.5)
 
     #errors for output
-    output_deltas = [0.0] * @url_ids.size
-    @url_ids.each_index do |k|
-      error = targets[k] - @activation_outputs[k]
-      output_deltas[k] =  dtanh(@activation_outputs[k]) * error
+    output_deltas = [0.0] * @output_ids.size
+    @output_ids.each_index do |k|
+      error = targets[k] - @output_activations[k]
+      output_deltas[k] =  dtanh(@output_activations[k]) * error
     end
     
     #errors for hidden
     hidden_deltas = [0.0] * @hidden_ids.size
     @hidden_ids.each_index do |j|
       error = 0.0
-      @url_ids.each_index do |k|
+      @output_ids.each_index do |k|
         error = error += output_deltas[k] * @weights_output[j][k]
       end
-      hidden_deltas[j] = dtanh(@activation_hidden[j]) * error
+      hidden_deltas[j] = dtanh(@hidden_activations[j]) * error
     end
     
     #update output weights
     @hidden_ids.each_index do |j|
-      @url_ids.each_index do |k|
-        change = output_deltas[k] * @activation_hidden[j]
+      @output_ids.each_index do |k|
+        change = output_deltas[k] * @hidden_activations[j]
         @weights_output[j][k] += n * change
       end
     end
     
-    @word_ids.each_index do |i|
+    @input_ids.each_index do |i|
       @hidden_ids.each_index do |j|
-        change = hidden_deltas[j] * @activation_inputs[i]
+        change = hidden_deltas[j] * @input_activations[i]
         @weights_input[i][j] += n * change
       end
     end
     
   end
   
-  def train_query(word_ids, url_ids, selected_url_id)
-    generate_hidden_node(word_ids, url_ids)
-    setup_network(word_ids, url_ids)
+  def train_query(input_ids, output_ids, selected_url_id)
+    generate_hidden_node(input_ids, output_ids)
+    setup_network(input_ids, output_ids)
     feed_forward
-    targets = [0.0] * url_ids.size
-    i = url_ids.index(selected_url_id)
+    targets = [0.0] * output_ids.size
+    i = output_ids.index(selected_url_id)
     targets[i] = 1.0
     back_propagate(targets)
     update
@@ -229,7 +236,7 @@ class Network
     
     @network.transaction do |store|
       puts "input hidden:"
-      @word_ids.each do |w|
+      @input_ids.each do |w|
         puts "\t#{store[:input_hidden][w]}"
       end
       
@@ -250,17 +257,25 @@ end
 wWorld, wRiver, wBank = 101, 102, 103
 uWorldBank, uRiver, uEarth =  201, 202, 203
 test_words = [wWorld, wBank]
-test_urls = [uWorldBank, uRiver, uEarth]
+
+all_urls = [uWorldBank, uRiver, uEarth]
 
 n = Network.new
-# n.generate_hidden_node(test_words, test_urls, 0.0)
-# n.setup_network(test_words, test_urls)
-# n.print_network
 
-# puts n.get_all_hidden_ids([wWorld], [uRiver]).inspect
-# 
-# puts n.get_result(test_words, test_urls)
-n.train_query([wWorld, wBank], [uWorldBank, uRiver, uEarth], uWorldBank)
-puts n.get_result([wWorld, wBank], [uWorldBank, uRiver, uEarth])
-n.print_network
+
+# n.train_query([wWorld, wBank], all_urls, uWorldBank) 
+# puts n.get_result([wWorld, wBank], all_urls)
+
+n.train_query([wWorld, wBank], all_urls, uWorldBank) 
+puts "result: #{n.get_result([wWorld, wBank], all_urls).inspect}"
+
+30.times do
+  n.train_query([wWorld, wBank], all_urls, uWorldBank)
+  n.train_query([wRiver, wBank], all_urls, uRiver)
+  n.train_query([wWorld], all_urls, uEarth)
+end
+
+puts n.get_result([wWorld, wBank], all_urls).inspect
+puts n.get_result([wRiver, wBank], all_urls).inspect
+puts n.get_result([wBank], all_urls).inspect
 
