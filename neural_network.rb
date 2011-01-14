@@ -1,5 +1,7 @@
+require 'rubygems'
 require 'pstore'
 require 'fileutils'
+require 'graphviz'
 
 class Link
   attr_reader :from, :to
@@ -41,8 +43,8 @@ class Network
   end
 
   def generate_hidden_node(input_ids, output_ids)
-    create_key = input_ids.sort.join("_")
-    
+    create_key = "hidden_#{input_ids.sort.join("_")}"
+
     @network.transaction do |store|
       
       unless store[:hidden].include? create_key
@@ -63,14 +65,24 @@ class Network
   def get_input_hidden_strength(input_id, hidden_id)
     @network.transaction do |store|
       found = store[:input_hidden][input_id].find {|l| l.to == hidden_id }
-      found.strength rescue -0.2
+      if(!found)
+        found = Link.new(input_id, hidden_id, -0.2)
+        store[:input_hidden][input_id] << found
+      end
+      found.strength
+        
     end
   end
   
   def get_hidden_output_strength(hidden_id, output_id)
     @network.transaction do |store|
       found = store[:hidden_output][hidden_id].find {|l| l.to == output_id }
-      found.strength rescue 0.0
+      if(!found)
+        found = Link.new(hidden_id, output_id, 0.0)
+        store[:hidden_output][hidden_id] << found
+      end
+      
+      found.strength
     end    
   end
   
@@ -82,8 +94,7 @@ class Network
       else
         store[:input_hidden][input_id] << Link.new(input_id, hidden_id, strength)
       end
-    end
-    
+    end  
   end
   
   def set_hidden_output_strength(hidden_id, output_id, strength)
@@ -235,6 +246,45 @@ class Network
   def print_network
     
     @network.transaction do |store|
+      # Create a new graph
+      g = GraphViz.new( :G, :type => :digraph, :rankdir => "LR")
+      inputs = g.add_graph("inputs", :rank => 0)
+      hidden = g.add_graph("hidden", :rank => 1)
+      outputs = g.add_graph("outputs", :rank => 2)
+      
+      input_hash = {}
+      hidden_hash = {}
+      output_hash = {}
+      
+      # Create two nodes
+      @input_ids.each do |i|
+        store[:input_hidden][i].each do |link|
+          input_hash[link] = inputs.add_node(link.from.to_s, :shape => 'box')
+        end
+      end
+      
+      store[:hidden].each do |h|
+        hidden_hash[h] = hidden.add_node(h, :shape => 'box')
+      end
+      
+      @hidden_ids.each do |h|
+        store[:hidden_output][h].each do |link|
+          output_hash[link] = outputs.add_node(link.to.to_s, :shape => 'box')
+        end
+      end
+      
+      input_hash.each do |link, node|
+        g.add_edge(node, hidden_hash[link.to], {:penwidth =>  3 * link.strength, :arrowhead => 'none', :label => sprintf('%.2f', link.strength)})
+      end
+      
+      output_hash.each do |link, node|
+        g.add_edge(hidden_hash[link.from], node, {:penwidth =>  3 * link.strength, :arrowhead => 'none', :label => sprintf('%.2f', link.strength)})
+      end
+      
+
+      g.output( :png => "network.png" )      
+      
+      
       puts "input hidden:"
       @input_ids.each do |w|
         puts "\t#{store[:input_hidden][w]}"
@@ -269,6 +319,8 @@ n = Network.new
 n.train_query([wWorld, wBank], all_urls, uWorldBank) 
 puts "result: #{n.get_result([wWorld, wBank], all_urls).inspect}"
 
+# n.print_network
+
 30.times do
   n.train_query([wWorld, wBank], all_urls, uWorldBank)
   n.train_query([wRiver, wBank], all_urls, uRiver)
@@ -279,3 +331,4 @@ puts n.get_result([wWorld, wBank], all_urls).inspect
 puts n.get_result([wRiver, wBank], all_urls).inspect
 puts n.get_result([wBank], all_urls).inspect
 
+n.print_network
