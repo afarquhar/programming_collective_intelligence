@@ -117,6 +117,18 @@ class DecisionTree
     end
   end
   
+  def classify(observation, tree)
+    return tree.results if tree.results
+    v = observation[tree.col]
+    branch = nil
+    if(v.is_a? Numeric)
+      branch = v >= tree.value ? tree.true_branch : tree.false_branch
+    else
+      branch = v == tree.value ? tree.true_branch : tree.false_branch
+    end
+    return classify(observation, branch)
+  end
+  
   def entropy(data)
     ent = 0.0
     u = unique_counts(data)
@@ -140,6 +152,7 @@ if __FILE__ == $0
   
   root = tree.build_tree(data)
   tree.print_tree(root)
+  puts tree.classify(['(direct)', "USA", 'yes', 5], root).inspect
 end
 
 
