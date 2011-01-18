@@ -16,7 +16,9 @@ data = [["slashdot","USA","yes",18,"None"],
 ["kiwitobes","France","yes",19,"Basic"]]
 
 class DecisionNode
-  attr_reader :results, :col, :value, :true_branch, :false_branch
+  attr_reader :col, :value
+  attr_accessor :true_branch, :false_branch, :results
+  
   def initialize(opts = {})
     
     @col = opts[:col]
@@ -82,7 +84,7 @@ class DecisionTree
         set1 = sets[:true]
         set2 = sets[:false]
         set1_score = p * self.send(score_func, set1)
-        set2_score = (1-p) * self.send(score_func, set2)
+        set2_score = (1.0-p) * self.send(score_func, set2)
 
         gain = current_score - set1_score - set2_score
 
@@ -138,6 +140,43 @@ class DecisionTree
     end
     ent
   end
+  
+  def prune(tree, mingain)
+    # if not leaf node, recurse 
+    if(!tree.true_branch.results)
+      prune(tree.true_branch, mingain)
+    end
+    
+    if(!tree.false_branch.results)
+      prune(tree.false_branch, mingain)
+    end
+    
+    if(tree.true_branch.results && tree.false_branch.results)
+
+      tb, fb = [], []
+      tree.true_branch.results.each do |result_key, count|
+        count.times do tb << [result_key] end
+      end
+
+      tree.false_branch.results.each do |result_key, count|
+        count.times do fb << [result_key] end
+      end
+      # tb.flatten!
+      # fb.flatten!
+          
+      delta = entropy(tb + fb) - (entropy(tb) + entropy(fb)/2)
+
+
+      if(delta < mingain)
+
+        tree.true_branch, tree.false_branch = nil, nil
+        ar = tb + fb
+
+        new_thing = unique_counts(ar)
+        tree.results = new_thing
+      end
+    end
+  end
 end
 
 if __FILE__ == $0
@@ -152,7 +191,11 @@ if __FILE__ == $0
   
   root = tree.build_tree(data)
   tree.print_tree(root)
-  puts tree.classify(['(direct)', "USA", 'yes', 5], root).inspect
+  # puts tree.classify(['(direct)', "USA", 'yes', 5], root).inspect
+  tree.prune(root, 0.1)
+  #  tree.print_tree(root)
+  tree.prune(root, 1.0)
+  tree.print_tree(root)
 end
 
 

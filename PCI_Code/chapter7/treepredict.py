@@ -105,7 +105,7 @@ def getdepth(tree):
   return max(getdepth(tree.tb),getdepth(tree.fb))+1
 
 
-from PIL import Image,ImageDraw
+# from PIL import Image,ImageDraw
 
 def drawtree(tree,jpeg='tree.jpg'):
   w=getwidth(tree)*100
@@ -248,3 +248,11 @@ def buildtree(rows,scoref=entropy):
                         tb=trueBranch,fb=falseBranch)
   else:
     return decisionnode(results=uniquecounts(rows))
+    
+tree = buildtree(my_data)
+prune(tree, 0.1)
+printtree(tree)
+prune(tree, 1.0)
+printtree(tree)
+
+
