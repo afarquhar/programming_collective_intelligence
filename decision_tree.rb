@@ -15,32 +15,40 @@ data = [["slashdot","USA","yes",18,"None"],
 ["google","UK","yes",18,"Basic"],
 ["kiwitobes","France","yes",19,"Basic"]]
 
+class DecisionNode
+  attr_reader :results, :col, :value, :true_branch, :false_branch
+  def initialize(opts = {})
+    
+    @col = opts[:col]
+    @value = opts[:val]
+    @results = opts[:results]
+    @true_branch = opts[:true_branch]
+    @false_branch = opts[:false_branch]
+  end
+end
 
 class DecisionTree
-  def initialize(data)
-    @data = data
-  end
   
-  def divide_set(col_index, value)
-    part = @data.partition do |ar| 
+  def divide_set(data, col_index, value)
+    part = data.partition do |ar| 
       x = ar[col_index]
       x.is_a?(Numeric) ? x >= value : x == value
     end
     {:true => part.first, :false => part.last}
   end
   
-  def unique_counts
+  def unique_counts(data)
     results = Hash.new {|h, k| h[k] = 0 }
-    @data.each do |row|
+    data.each do |row|
       res = row.last
       results[res] += 1
     end
     results
   end
   
-  def gini_impurity
-    total = @data.size
-    counts = unique_counts
+  def gini_impurity(data)
+    total = data.size
+    counts = unique_counts(data)
     imp = 0
     
     counts.each do |k1, v1|
@@ -54,10 +62,66 @@ class DecisionTree
     imp
   end
   
-  def entropy
+  def build_tree(data, score_func = :entropy)
+    return DecisionNode.new if data.empty?
+    current_score = self.send(score_func, data)
+    best_gain = 0.0
+    best_criteria = nil
+    best_sets = nil
+    
+    column_count = data.first.size - 1
+    (0...column_count).each do |col|
+
+      column_values = data.map do |row|
+        row[col]
+      end.uniq
+      
+      column_values.each do |value|
+        sets = divide_set(data, col, value)
+        p = sets[:true].size.to_f / data.size
+        set1 = sets[:true]
+        set2 = sets[:false]
+        set1_score = p * self.send(score_func, set1)
+        set2_score = (1-p) * self.send(score_func, set2)
+
+        gain = current_score - set1_score - set2_score
+
+        if(gain > best_gain && !set1.empty? && !set2.empty?)
+          best_gain = gain
+          best_criteria = {:col => col, :value => value}
+          best_sets = {:true => set1, :false => set2}
+        end
+      end
+    end
+    
+    
+    if best_gain > 0
+      true_branch = build_tree(best_sets[:true])
+      false_branch = build_tree(best_sets[:false])
+      return DecisionNode.new(:col => best_criteria[:col], :val => best_criteria[:value], :true_branch => true_branch, :false_branch => false_branch)
+    else
+      return DecisionNode.new(:results => unique_counts(data))
+    end
+    
+  end
+  
+  def print_tree(root, indent = "  ")
+    if(root.results)
+      puts root.results.inspect
+    else
+      puts "#{root.col}: #{root.value}?"
+      print "#{indent}T ->"
+      print_tree(root.true_branch, indent + "  ")
+      print "#{indent}F -> "
+      print_tree(root.false_branch, indent + "  ")
+    end
+  end
+  
+  def entropy(data)
     ent = 0.0
-    unique_counts.each do |res, count|
-      p = count.to_f/@data.size
+    u = unique_counts(data)
+    u.each do |res, count|
+      p = count.to_f/data.size
       ent = ent - p * (Math.log(p)/Math.log(2))
     end
     ent
@@ -65,16 +129,17 @@ class DecisionTree
 end
 
 if __FILE__ == $0
-  tree = DecisionTree.new(data)
-  # puts tree.divide_set(2, 'yes').inspect  
-  puts tree.gini_impurity
-  puts tree.entropy
-  set1 = tree.divide_set(2, 'yes')[:true]
-  set2 = tree.divide_set(2, 'yes')[:false]
+  tree = DecisionTree.new
+  puts tree.gini_impurity(data)
+  puts tree.entropy(data)
+  set1 = tree.divide_set(data, 2, 'yes')[:true]
+  set2 = tree.divide_set(data, 2, 'yes')[:false]
   
-  puts DecisionTree.new(set1).entropy
-  puts DecisionTree.new(set1).gini_impurity
+  puts DecisionTree.new.entropy(set1)
+  puts DecisionTree.new.gini_impurity(set1)
   
+  root = tree.build_tree(data)
+  tree.print_tree(root)
 end
 
 
