@@ -129,6 +129,40 @@ class DecisionTree
       branch = v == tree.value ? tree.true_branch : tree.false_branch
     end
     return classify(observation, branch)
+    
+  end
+  
+  def missing_data_classify(observation, tree)
+    return tree.results if tree.results
+    v = observation[tree.col]
+    if(!v)
+      tr, fr = missing_data_classify(observation, tree.true_branch), missing_data_classify(observation, tree.false_branch)
+      tcount = tr.values.inject(:+)
+      fcount = fr.values.inject(:+)
+      
+      tw = tcount.to_f/(tcount + fcount)
+      fw = fcount.to_f/(tcount + fcount)
+      
+      result = {}
+      
+      tr.each do |k, v|
+        result[k] = v * tw
+      end
+      fr.each do |k, v|
+        result[k] = v * fw
+      end
+      
+      return result
+    else
+      branch = nil
+      if(v.is_a? Numeric)
+        branch = v >= tree.value ? tree.true_branch : tree.false_branch
+      else
+        branch = v == tree.value ? tree.true_branch : tree.false_branch        
+      end
+      return missing_data_classify(observation, branch)
+    end
+    
   end
   
   def entropy(data)
@@ -139,6 +173,16 @@ class DecisionTree
       ent = ent - p * (Math.log(p)/Math.log(2))
     end
     ent
+  end
+  
+  def variance(data)
+    return 0 if data.empty?
+    data = data.map {|row| row[-2] }
+    mean = data.inject(0.0){|memo, x| memo += x } / data.size
+    variance = data.inject(0.0) do |memo, v|
+      memo += (v - mean) ** 2
+    end
+    variance/data.size
   end
   
   def prune(tree, mingain)
@@ -161,22 +205,20 @@ class DecisionTree
       tree.false_branch.results.each do |result_key, count|
         count.times do fb << [result_key] end
       end
-      # tb.flatten!
-      # fb.flatten!
           
       delta = entropy(tb + fb) - (entropy(tb) + entropy(fb)/2)
 
 
       if(delta < mingain)
-
         tree.true_branch, tree.false_branch = nil, nil
         ar = tb + fb
-
         new_thing = unique_counts(ar)
         tree.results = new_thing
       end
     end
   end
+  
+  
 end
 
 if __FILE__ == $0
@@ -190,12 +232,15 @@ if __FILE__ == $0
   puts DecisionTree.new.gini_impurity(set1)
   
   root = tree.build_tree(data)
-  tree.print_tree(root)
+  # tree.print_tree(root)
   # puts tree.classify(['(direct)', "USA", 'yes', 5], root).inspect
-  tree.prune(root, 0.1)
+  # tree.prune(root, 0.1)
   #  tree.print_tree(root)
-  tree.prune(root, 1.0)
-  tree.print_tree(root)
+  # tree.prune(root, 1.0)
+  # tree.print_tree(root)
+  puts tree.missing_data_classify(['google', nil, 'yes', nil], root).inspect
+  puts tree.missing_data_classify(['google', 'France', nil, nil], root).inspect
+  # puts tree.variance(data)
 end
 
 

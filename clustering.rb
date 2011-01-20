@@ -7,8 +7,8 @@ class BiCluster
   end
 
   def pearson(a1, a2)
-    sum1 = a1.inject(0) {|memo, x| memo += x }
-    sum2 = a2.inject(0) {|memo, x| memo += x }
+    sum1 = a1.inject(:+)
+    sum2 = a2.inject(:+)
     
     sum1sq = a1.inject(0) {|memo, x| memo += x**2 }
     sum2sq = a2.inject(0) {|memo, x| memo += x**2 }
